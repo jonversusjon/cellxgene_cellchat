@@ -1,0 +1,183 @@
+run:
+  species: human                  
+  n_cores: 13                     
+  outdir: "cellchat_runs_all_5k_disease_normal"
+
+input:
+  files:
+    - "adult_colon_norm.h5ad"
+    - "adult_esophagus_norm.h5ad"
+    - "adult_heart_norm.h5ad"
+    - "adult_intestine_norm.h5ad"
+    - "adult_kidney_norm.h5ad"
+    - "adult_large_intestine_norm.h5ad"
+    - "adult_liver_norm.h5ad"
+    - "adult_lung_norm.h5ad"
+    - "adult_pancreas_norm.h5ad"
+    - "adult_skin_of_body_norm.h5ad"
+    - "adult_small_intestine_norm.h5ad"
+    - "adult_spleen_norm.h5ad"
+    - "adult_stomach_norm.h5ad"
+  dir: "/large_storage/goodarzilab/jramirez2/datasets/cellxgene/src/raw/adult_by_tissue_norm_h5ad"
+  pattern: null  # Using explicit file list
+  limit_files: 0  # Set to 2-3 for testing
+
+metadata:
+  # Cell type column - try these in order
+  cell_type_col: "cell_type"      
+  alt_cell_type_cols:             
+    - "labels"
+    - "celltype"
+    - "cluster"
+  
+  # Disease classification
+  donor_col: "donor_id"            # Column containing donor IDs
+  disease_col: "disease"           # Column containing disease status
+  control_value: "normal"          # Value indicating healthy/control
+  
+  # Gene information
+  gene_name_field: "feature_name"  # Field in var containing gene names      
+  min_cells_per_type: 10           # Minimum cells per type to keep
+  
+  # Columns to preserve in output
+  preserve_cols:                        
+    - "disease"                         
+    - "tissue"
+    - "donor_id"                        
+    - "dataset_id"                      
+    - "assay"                           
+    - "sex"                             
+    - "development_stage"               
+
+cell_communication:
+  # Meta types are defined in cellchat_functions.R
+
+  analyses:
+    - name: "neurons_to_neurons"
+      senders: ["neurons"]
+      receivers: ["neurons"]
+      description: "Neural circuit communication"
+      priority: 1
+      
+    - name: "immune_to_neurons"
+      senders: ["immune"]
+      receivers: ["neurons"]
+      description: "Neuroinflammatory signaling"
+      priority: 2
+      
+    - name: "neurons_to_immune"
+      senders: ["neurons"]
+      receivers: ["immune"]
+      description: "Neural regulation of immunity"
+      priority: 3
+      
+    - name: "epithelial_to_neurons"
+      senders: ["epithelial_barrier"]
+      receivers: ["neurons"]
+      description: "Epithelial-neural signaling"
+      priority: 4
+      
+    - name: "vascular_to_neurons"
+      senders: ["endothelial_vascular"]
+      receivers: ["neurons"]
+      description: "Vascular-neural communication"
+      priority: 5
+      
+    - name: "endocrine_to_neurons"
+      senders: ["secretory_endocrine"]
+      receivers: ["neurons"]
+      description: "Hormonal signaling to neurons"
+      priority: 6
+      
+    - name: "neurons_to_endocrine"
+      senders: ["neurons"]
+      receivers: ["secretory_endocrine"]
+      description: "Neural regulation of secretion"
+      priority: 7
+      
+    - name: "stromal_to_neurons"
+      senders: ["stromal_support"]
+      receivers: ["neurons"]
+      description: "ECM and structural signals"
+      priority: 8
+      
+    - name: "glial_to_neurons"
+      senders: ["glial_support"]
+      receivers: ["neurons"]
+      description: "Glial support signals"
+      priority: 9
+      
+    - name: "neurons_to_glial"
+      senders: ["neurons"]
+      receivers: ["glial_support"]
+      description: "Neuron-glia communication"
+      priority: 10
+
+  disease_comparison:
+    enable: true
+    comparison_mode: "donor"        # Compare by donor disease status
+    min_cells_per_condition: 10     # Minimum cells needed
+    min_cells_per_analysis: 20      # Total minimum for analysis
+
+# Overexpression analysis settings
+overexpression:
+  do_fast: true  # Use presto if available for speed
+
+# Sampling to manage memory
+sampling:
+  enable: true                    
+  max_cells_per_type: 5000       # Cap per cell type
+  global_cap: 0                  # 0 = no global cap
+  sample_only_if_ncells_gt: 0    # 0 = sample all types
+
+# CellChat database subset to use
+database:
+  # Using actual CellChat database categories
+  subset: 
+    - "Secreted Signaling"
+    - "ECM-Receptor"
+    - "Cell-Cell Contact"
+    - "Non-protein Signaling"
+
+# Communication probability calculation
+comm_prob:
+  type: "triMean"        # triMean or truncatedMean
+  trim: 0.1              # For truncatedMean
+  min_cells_for_comm: 10 # Minimum cells for communication
+  thresh: 0.05           # P-value threshold
+
+# PPI network projection (optional)
+project_ppi:
+  enable: false  # Set to true if you want to use PPI
+  species: human
+
+# Analysis settings
+analysis:
+  compute_centrality: true  # Network centrality metrics      
+  patterns:
+    enable: false  # Pattern analysis (computationally intensive)         
+    k_max: 3
+  subsets:                 
+    enable: true                  
+    run_control: true     # Analyze healthy donors
+    run_disease: true     # Analyze disease donors
+    run_comparison: true  # Compare healthy vs disease
+
+# Quality control outputs
+qc:
+  pdf: true              # Generate QC plots        
+  max_group_panels: 12   # Limit panels in plots       
+  seed: 123              # Random seed
+
+# Disease context derivation
+# The refactored script will auto-detect the appropriate method
+derive_donor_context:
+  enable: true           # Let the script decide based on data
+  method: "auto"         # auto | threshold | any_disease
+  disease_threshold: 0.1 # For threshold method (>10% disease cells = disease donor)
+  
+  # The script will:
+  # 1. Check if disease is already at donor level (all cells from donor have same status)
+  # 2. If yes -> use disease column directly
+  # 3. If mostly donor-level (< 5% mixed) -> use any_disease method  
+  # 4. If significantly mixed -> use threshold method

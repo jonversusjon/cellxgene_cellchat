@@ -1,0 +1,43 @@
+# Output directories - don't track results
+cellchat_runs_*/
+archive/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# R
+.Rhistory
+.RData
+.Rproj.user
+
+# Jupyter Notebooks checkpoints
+.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Slurm output files
+slurm-*.out
+
+# Data files (keep your scripts lightweight)
+*.h5ad
+*.rds
+*.csv
+*.tsv
+
+# Logs
+*.log
+logs/
