@@ -180,8 +180,17 @@ flush.console()
 
 # Create a shared progress tracking file in logs/
 progress_file <- file.path(LOGSDIR, "progress.txt")
-cat(sprintf("[%s] BATCH_START: Processing %d files with %d worker(s)\n", 
-            Sys.time(), length(h5ad_files), if(length(h5ad_files) == 1L) 1 else n_workers), 
+
+# Calculate expected analyses per file (for progress tracking)
+n_subsets <- 1  # always have "all"
+if (run_disease_comparison) {
+  n_subsets <- n_subsets + 2  # add "normal" and "disease"
+}
+n_analyses_per_file <- length(analyses) * n_subsets
+total_tissues <- length(h5ad_files)
+
+cat(sprintf("[%s] BATCH_START: Processing %d files with %d worker(s) | %d analyses per file expected\n", 
+            Sys.time(), total_tissues, if(total_tissues == 1L) 1 else n_workers, n_analyses_per_file), 
     file = progress_file, append = FALSE)
 
 results <- future_lapply(
@@ -200,7 +209,9 @@ results <- future_lapply(
     run_disease_comparison = run_disease_comparison,
     min_cells_per_condition = min_cells_per_condition,
     min_cells_per_analysis = min_cells_per_analysis,
-    FUNCTIONS_FILE = FUNCTIONS_FILE
+    FUNCTIONS_FILE = FUNCTIONS_FILE,
+    n_analyses_per_file = n_analyses_per_file,
+    total_tissues = total_tissues
   ),
   FUN = function(h5) {
     # Helper function to log progress to shared file
@@ -211,8 +222,11 @@ results <- future_lapply(
       cat(msg_line, file = progress_file, append = TRUE)
     }
     
+    # Track analyses completed for this file
+    analyses_completed <- 0
+    
     # Log file start
-    log_progress("FILE_START", sprintf("PID=%d", Sys.getpid()))
+    log_progress("FILE_START", sprintf("PID=%d | 0/%d analyses done", Sys.getpid(), n_analyses_per_file))
     
     suppressPackageStartupMessages({
       library(yaml)
@@ -509,9 +523,11 @@ results <- future_lapply(
 
         save_cellchat_results_qc(cellchat, OUTDIR, sample_name, cfg)
         msg(sprintf("  DONE: saved results '%s'", sample_name))
-        log_progress("ANALYSIS_COMPLETE", sprintf("subset=%s analysis=%s sample=%s interactions=%d", 
+        analyses_completed <- analyses_completed + 1
+        log_progress("ANALYSIS_COMPLETE", sprintf("subset=%s analysis=%s sample=%s interactions=%d | %d/%d done", 
                                                     sn, a_name, sample_name, 
-                                                    if (!is.null(cellchat@net$count)) sum(cellchat@net$count > 0) else 0))
+                                                    if (!is.null(cellchat@net$count)) sum(cellchat@net$count > 0) else 0,
+                                                    analyses_completed, n_analyses_per_file))
 
         out_summaries[[paste0(sn, "_", a_name)]] <- list(
           status = "completed",
@@ -526,7 +542,18 @@ results <- future_lapply(
     }
 
     rm(prepared); gc()
-    log_progress("FILE_COMPLETE", sprintf("analyses_completed=%d", sum(sapply(out_summaries, function(x) x$status == "completed"))))
+    
+    # Count how many tissues have completed so far (by reading progress file)
+    tissues_completed <- 0
+    if (file.exists(progress_file)) {
+      progress_lines <- readLines(progress_file, warn = FALSE)
+      tissues_completed <- sum(grepl("FILE_COMPLETE", progress_lines))
+    }
+    tissues_completed <- tissues_completed + 1  # including this one
+    
+    log_progress("FILE_COMPLETE", sprintf("analyses_completed=%d/%d | %d/%d tissues complete", 
+                                           analyses_completed, n_analyses_per_file,
+                                           tissues_completed, total_tissues))
     out_summaries
   }
 )
